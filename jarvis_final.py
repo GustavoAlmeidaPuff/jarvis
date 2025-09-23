@@ -18,6 +18,8 @@ import pvporcupine
 import vosk
 from pathlib import Path
 import pygame
+import pyttsx3
+from datetime import datetime
 
 
 class JarvisFinal:
@@ -38,6 +40,7 @@ class JarvisFinal:
         
         # Inicialização dos componentes
         self._init_pygame()
+        self._init_tts()
         self._init_porcupine()
         self._init_vosk(model_path)
         self._init_command_mapping()
@@ -65,6 +68,50 @@ class JarvisFinal:
             self.logger.warning(f"⚠️  Erro ao inicializar pygame: {e}")
             self.logger.info("💡 Som de ativação não estará disponível")
     
+    def _init_tts(self):
+        """Inicializa o sistema de síntese de voz"""
+        try:
+            self.tts_engine = pyttsx3.init()
+            
+            # Listar todas as vozes disponíveis
+            voices = self.tts_engine.getProperty('voices')
+            self.logger.info("🎤 Vozes disponíveis:")
+            for i, voice in enumerate(voices):
+                self.logger.info(f"   {i}: {voice.name} ({voice.id})")
+            
+            # Tentar encontrar voz em português brasileiro
+            portuguese_voice = None
+            for voice in voices:
+                voice_name = voice.name.lower()
+                voice_id = voice.id.lower()
+                # Priorizar português brasileiro
+                if 'pt-br' in voice_id or 'brazil' in voice_name:
+                    portuguese_voice = voice
+                    break
+                elif any(term in voice_name or term in voice_id for term in ['pt', 'portuguese', 'brasil', 'br']):
+                    portuguese_voice = voice
+            
+            if portuguese_voice:
+                self.tts_engine.setProperty('voice', portuguese_voice.id)
+                self.logger.info(f"✅ Voz em português selecionada: {portuguese_voice.name}")
+            else:
+                # Se não encontrar voz em português, usar a primeira disponível
+                if voices:
+                    self.tts_engine.setProperty('voice', voices[0].id)
+                    self.logger.info(f"⚠️  Usando voz padrão: {voices[0].name}")
+                else:
+                    self.logger.warning("⚠️  Nenhuma voz encontrada")
+            
+            # Configurar velocidade e volume para som mais natural
+            self.tts_engine.setProperty('rate', 180)  # Velocidade um pouco mais rápida
+            self.tts_engine.setProperty('volume', 0.9)  # Volume alto
+            
+            self.logger.info("✅ Sistema de síntese de voz inicializado")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao inicializar TTS: {e}")
+            self.logger.info("💡 Respostas por voz não estarão disponíveis")
+            self.tts_engine = None
+    
     def _play_activation_sound(self):
         """Reproduz o som de ativação"""
         try:
@@ -77,6 +124,35 @@ class JarvisFinal:
                 self.logger.warning(f"⚠️  Arquivo de som não encontrado: {sound_file}")
         except Exception as e:
             self.logger.warning(f"⚠️  Erro ao reproduzir som: {e}")
+    
+    def _speak(self, text: str):
+        """Fala o texto usando síntese de voz"""
+        if self.tts_engine:
+            try:
+                self.logger.info(f"🗣️  Falando: {text}")
+                self.tts_engine.say(text)
+                self.tts_engine.runAndWait()
+            except Exception as e:
+                self.logger.warning(f"⚠️  Erro ao falar: {e}")
+        else:
+            self.logger.info(f"💬 {text}")
+    
+    def _get_greeting(self):
+        """Retorna saudação baseada na hora"""
+        now = datetime.now()
+        hour = now.hour
+        
+        if 5 <= hour < 12:
+            return "Bom dia"
+        elif 12 <= hour < 18:
+            return "Boa tarde"
+        else:
+            return "Boa noite"
+    
+    def _get_time_string(self):
+        """Retorna string formatada da hora atual"""
+        now = datetime.now()
+        return now.strftime("%H horas e %M minutos")
     
     def _init_porcupine(self):
         """Inicializa o Porcupine para detecção de hotword"""
@@ -142,7 +218,9 @@ class JarvisFinal:
             "ajuda": self._show_help,
             "navegador": self._open_browser,
             "arquivos": self._list_files,
-            "status": self._system_status
+            "status": self._system_status,
+            "olá": self._greeting_command,
+            "ola": self._greeting_command
         }
         
         self.logger.info(f"📋 Mapeamento de comandos inicializado com {len(self.commands)} comandos")
@@ -311,9 +389,9 @@ class JarvisFinal:
     
     def _show_time(self):
         """Mostra a hora atual"""
-        result = subprocess.run(["date", "+%H:%M:%S"], capture_output=True, text=True)
-        if result.returncode == 0:
-            self.logger.info(f"🕐 Hora atual: {result.stdout.strip()}")
+        time_str = self._get_time_string()
+        self.logger.info(f"🕐 Hora atual: {time_str}")
+        self._speak(f"São {time_str}")
     
     def _show_date(self):
         """Mostra a data atual"""
@@ -338,6 +416,14 @@ class JarvisFinal:
         result = subprocess.run(["uptime"], capture_output=True, text=True)
         if result.returncode == 0:
             self.logger.info(f"⚡ Status do sistema: {result.stdout.strip()}")
+    
+    def _greeting_command(self):
+        """Comando de saudação personalizado"""
+        greeting = self._get_greeting()
+        message = f"{greeting} Gustavo"
+        
+        self.logger.info(f"👋 {message}")
+        self._speak(message)
     
     def _show_help(self):
         """Mostra comandos disponíveis"""
