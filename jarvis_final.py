@@ -18,7 +18,9 @@ import pvporcupine
 import vosk
 from pathlib import Path
 import pygame
-import pyttsx3
+from gtts import gTTS
+import tempfile
+import os
 from datetime import datetime
 
 
@@ -69,48 +71,18 @@ class JarvisFinal:
             self.logger.info("💡 Som de ativação não estará disponível")
     
     def _init_tts(self):
-        """Inicializa o sistema de síntese de voz"""
+        """Inicializa o sistema de síntese de voz com gTTS"""
         try:
-            self.tts_engine = pyttsx3.init()
+            # Configurar gTTS para português brasileiro
+            self.tts_lang = 'pt-br'  # Português brasileiro
+            self.tts_slow = False    # Velocidade normal (mais natural)
             
-            # Listar todas as vozes disponíveis
-            voices = self.tts_engine.getProperty('voices')
-            self.logger.info("🎤 Vozes disponíveis:")
-            for i, voice in enumerate(voices):
-                self.logger.info(f"   {i}: {voice.name} ({voice.id})")
-            
-            # Tentar encontrar voz em português brasileiro
-            portuguese_voice = None
-            for voice in voices:
-                voice_name = voice.name.lower()
-                voice_id = voice.id.lower()
-                # Priorizar português brasileiro
-                if 'pt-br' in voice_id or 'brazil' in voice_name:
-                    portuguese_voice = voice
-                    break
-                elif any(term in voice_name or term in voice_id for term in ['pt', 'portuguese', 'brasil', 'br']):
-                    portuguese_voice = voice
-            
-            if portuguese_voice:
-                self.tts_engine.setProperty('voice', portuguese_voice.id)
-                self.logger.info(f"✅ Voz em português selecionada: {portuguese_voice.name}")
-            else:
-                # Se não encontrar voz em português, usar a primeira disponível
-                if voices:
-                    self.tts_engine.setProperty('voice', voices[0].id)
-                    self.logger.info(f"⚠️  Usando voz padrão: {voices[0].name}")
-                else:
-                    self.logger.warning("⚠️  Nenhuma voz encontrada")
-            
-            # Configurar velocidade e volume para som mais natural
-            self.tts_engine.setProperty('rate', 180)  # Velocidade um pouco mais rápida
-            self.tts_engine.setProperty('volume', 0.9)  # Volume alto
-            
-            self.logger.info("✅ Sistema de síntese de voz inicializado")
+            self.logger.info("✅ Sistema de síntese de voz gTTS inicializado")
+            self.logger.info(f"🌍 Idioma configurado: {self.tts_lang}")
         except Exception as e:
-            self.logger.warning(f"⚠️  Erro ao inicializar TTS: {e}")
+            self.logger.warning(f"⚠️  Erro ao inicializar gTTS: {e}")
             self.logger.info("💡 Respostas por voz não estarão disponíveis")
-            self.tts_engine = None
+            self.tts_lang = None
     
     def _play_activation_sound(self):
         """Reproduz o som de ativação"""
@@ -126,14 +98,33 @@ class JarvisFinal:
             self.logger.warning(f"⚠️  Erro ao reproduzir som: {e}")
     
     def _speak(self, text: str):
-        """Fala o texto usando síntese de voz"""
-        if self.tts_engine:
+        """Fala o texto usando gTTS"""
+        if self.tts_lang:
             try:
                 self.logger.info(f"🗣️  Falando: {text}")
-                self.tts_engine.say(text)
-                self.tts_engine.runAndWait()
+                
+                # Criar arquivo temporário para o áudio
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
+                    temp_path = tmp_file.name
+                
+                # Gerar áudio com gTTS
+                tts = gTTS(text=text, lang=self.tts_lang, slow=self.tts_slow)
+                tts.save(temp_path)
+                
+                # Reproduzir o áudio
+                pygame.mixer.music.load(temp_path)
+                pygame.mixer.music.play()
+                
+                # Aguardar a reprodução terminar
+                while pygame.mixer.music.get_busy():
+                    pygame.time.wait(100)
+                
+                # Limpar arquivo temporário
+                os.unlink(temp_path)
+                
             except Exception as e:
-                self.logger.warning(f"⚠️  Erro ao falar: {e}")
+                self.logger.warning(f"⚠️  Erro ao falar com gTTS: {e}")
+                self.logger.info(f"💬 {text}")
         else:
             self.logger.info(f"💬 {text}")
     
