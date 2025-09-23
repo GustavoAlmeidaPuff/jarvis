@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Script global para executar o Jarvis de qualquer lugar
+# Uso: jarvis
+
+echo "🤖 Iniciando Jarvis - Assistente de Voz Local"
+echo "=============================================="
+
+# Diretório do Jarvis
+JARVIS_DIR="/home/gustavo/code/jarvis"
+
+# Verificar se o diretório existe
+if [ ! -d "$JARVIS_DIR" ]; then
+    echo "❌ Diretório do Jarvis não encontrado: $JARVIS_DIR"
+    exit 1
+fi
+
+# Ir para o diretório do Jarvis
+cd "$JARVIS_DIR"
+
+# Verificar se o ambiente virtual existe
+if [ ! -d "jarvis_env" ]; then
+    echo "❌ Ambiente virtual não encontrado"
+    echo "💡 Execute primeiro: cd $JARVIS_DIR && ./install.sh"
+    exit 1
+fi
+
+# Ativar ambiente virtual
+echo "🔧 Ativando ambiente virtual..."
+source jarvis_env/bin/activate
+
+# Carregar configurações
+if [ -f ".jarvis_config" ]; then
+    echo "⚙️  Carregando configurações..."
+    source .jarvis_config
+else
+    echo "⚠️  Arquivo de configuração não encontrado"
+fi
+
+# Verificar chave do Porcupine
+if [ -z "$PORCUPINE_ACCESS_KEY" ]; then
+    echo "❌ Chave do Porcupine não configurada"
+    echo "💡 Configure sua chave em $JARVIS_DIR/.jarvis_config"
+    exit 1
+fi
+
+echo "✅ Configuração verificada"
+echo "🎤 Iniciando Jarvis..."
+echo "💡 Diga 'Jarvis' seguido de um comando"
+echo "💡 Pressione Ctrl+C para sair"
+echo ""
+
+# Executar Jarvis
+python jarvis_final.py

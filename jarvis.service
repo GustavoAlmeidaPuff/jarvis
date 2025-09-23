@@ -1,0 +1,30 @@
+[Unit]
+Description=Jarvis Voice Assistant
+After=network.target sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=%i
+Group=audio
+WorkingDirectory=/home/%i/code/jarvis
+ExecStart=/usr/bin/python3 /home/%i/code/jarvis/jarvis_assistant.py
+Restart=always
+RestartSec=10
+Environment=DISPLAY=:0
+Environment=PULSE_RUNTIME_PATH=/run/user/%i/pulse
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis
+
+# Segurança
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/%i/code/jarvis
+
+[Install]
+WantedBy=multi-user.target

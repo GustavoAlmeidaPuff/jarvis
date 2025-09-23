@@ -1,0 +1,6 @@
+pvporcupine>=3.0.0
+vosk>=0.3.45
+sounddevice>=0.4.6
+numpy>=1.24.0
+scipy>=1.10.0
+pyaudio>=0.2.11

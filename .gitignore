@@ -1,0 +1,47 @@
+# Logs
+*.log
+jarvis.log
+
+# Arquivos de configuração com chaves
+.env
+.jarvis_config
+
+# Modelos Vosk (muito grandes para git)
+vosk-models/
+*.zip
+
+# Arquivos temporários
+*.tmp
+*.temp
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos de áudio de teste
+*.wav
+*.mp3
+*.flac
+
+# Arquivos de configuração do usuário
+jarvis_user.service
