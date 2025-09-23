@@ -17,6 +17,7 @@ import numpy as np
 import pvporcupine
 import vosk
 from pathlib import Path
+import pygame
 
 
 class JarvisFinal:
@@ -36,6 +37,7 @@ class JarvisFinal:
         self._setup_logging()
         
         # Inicialização dos componentes
+        self._init_pygame()
         self._init_porcupine()
         self._init_vosk(model_path)
         self._init_command_mapping()
@@ -53,6 +55,28 @@ class JarvisFinal:
             ]
         )
         self.logger = logging.getLogger('JarvisFinal')
+    
+    def _init_pygame(self):
+        """Inicializa o pygame para reprodução de sons"""
+        try:
+            pygame.mixer.init()
+            self.logger.info("✅ Pygame inicializado para reprodução de sons")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao inicializar pygame: {e}")
+            self.logger.info("💡 Som de ativação não estará disponível")
+    
+    def _play_activation_sound(self):
+        """Reproduz o som de ativação"""
+        try:
+            sound_file = os.path.join(os.getcwd(), 'listen.mp3')
+            if os.path.exists(sound_file):
+                pygame.mixer.music.load(sound_file)
+                pygame.mixer.music.play()
+                self.logger.info("🔊 Som de ativação reproduzido")
+            else:
+                self.logger.warning(f"⚠️  Arquivo de som não encontrado: {sound_file}")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao reproduzir som: {e}")
     
     def _init_porcupine(self):
         """Inicializa o Porcupine para detecção de hotword"""
@@ -146,6 +170,7 @@ class JarvisFinal:
                 
                 if keyword_index >= 0:
                     self.logger.info(f"🔥 Hotword 'jarvis' detectada!")
+                    self._play_activation_sound()
                     return True
             return False
         except Exception as e:
