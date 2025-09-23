@@ -411,7 +411,8 @@ class JarvisFinal:
     def _greeting_command(self):
         """Comando de saudação personalizado"""
         greeting = self._get_greeting()
-        message = f"{greeting} Gustavo"
+        time_str = self._get_time_string()
+        message = f"{greeting} Gustavo, são {time_str} e você ainda não ficou rico, bora trabalhar?"
         
         self.logger.info(f"👋 {message}")
         self._speak(message)
