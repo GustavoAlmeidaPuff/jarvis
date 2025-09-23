@@ -211,7 +211,8 @@ class JarvisFinal:
             "arquivos": self._list_files,
             "status": self._system_status,
             "olá": self._greeting_command,
-            "ola": self._greeting_command
+            "ola": self._greeting_command,
+            "trabalho": self._work_mode_command
         }
         
         self.logger.info(f"📋 Mapeamento de comandos inicializado com {len(self.commands)} comandos")
@@ -422,6 +423,48 @@ class JarvisFinal:
         self.logger.info("📋 Comandos disponíveis:")
         for command in sorted(self.commands.keys()):
             print(f"   - {command}")
+    
+    def _work_mode_command(self):
+        """Abre todos os aplicativos de trabalho"""
+        self.logger.info("💼 Iniciando modo de trabalho...")
+        
+        # Lista de aplicativos para abrir
+        apps = [
+            ("Slack", ["slack"]),
+            ("Spotify", ["spotify"]),
+            ("Cursor", ["cursor"]),
+            ("Navegador", ["google-chrome"]),
+            ("ChatGPT", ["google-chrome", "--app=https://chat.openai.com"]),
+            ("CopyQ", ["copyq"]),
+            ("Excalidraw", ["google-chrome", "--app=https://excalidraw.com"])
+        ]
+        
+        opened_apps = []
+        failed_apps = []
+        
+        for app_name, command in apps:
+            try:
+                self.logger.info(f"🚀 Abrindo {app_name}...")
+                subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                opened_apps.append(app_name)
+                time.sleep(0.5)  # Pequena pausa entre aberturas
+            except Exception as e:
+                self.logger.warning(f"⚠️  Erro ao abrir {app_name}: {e}")
+                failed_apps.append(app_name)
+        
+        # Relatório final
+        if opened_apps:
+            self.logger.info(f"✅ Aplicativos abertos: {', '.join(opened_apps)}")
+        
+        if failed_apps:
+            self.logger.warning(f"❌ Falha ao abrir: {', '.join(failed_apps)}")
+        
+        # Resposta por voz
+        if opened_apps:
+            self._speak("bora trabalhar")
+        else:
+            self.logger.error("❌ Nenhum aplicativo foi aberto")
+            self._speak("Desculpe, não consegui abrir os aplicativos de trabalho.")
 
 
 def main():

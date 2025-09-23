@@ -50,5 +50,5 @@ echo "💡 Diga 'Jarvis' seguido de um comando"
 echo "💡 Pressione Ctrl+C para sair"
 echo ""
 
-# Executar Jarvis
+# Executar Jarvis Final
 python jarvis_final.py
