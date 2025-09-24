@@ -101,18 +101,16 @@ Diga **"Jarvis"** seguido de um destes comandos:
 
 | Comando | Ação |
 |---------|------|
-| `abrir navegador` | Abre o navegador padrão |
-| `abrir firefox` | Abre o Firefox |
-| `abrir chrome` | Abre o Google Chrome |
-| `mostrar hora` | Exibe a hora atual |
-| `mostrar data` | Exibe a data atual |
-| `abrir vscode` | Abre o Visual Studio Code |
-| `abrir terminal` | Abre um terminal |
-| `listar arquivos` | Lista arquivos do diretório atual |
-| `status sistema` | Mostra status do sistema |
+| `teste` | Testa se o Jarvis está funcionando |
+| `hora` | Mostra a hora atual |
+| `data` | Mostra a data atual |
 | `ajuda` | Lista todos os comandos disponíveis |
-| `desligar computador` | Desliga o computador (com delay) |
-| `reiniciar computador` | Reinicia o computador (com delay) |
+| `navegador` | Abre o navegador Chrome |
+| `arquivos` | Lista arquivos do diretório atual |
+| `status` | Mostra status do sistema |
+| `olá` | Saudação personalizada |
+| `trabalho` | Abre aplicativos de trabalho |
+| `desliga` | Desliga o computador completamente |
 
 ### Exemplo de Uso
 

@@ -72,17 +72,23 @@ class JarvisFinal:
     
     def _init_tts(self):
         """Inicializa o sistema de síntese de voz com gTTS"""
-        try:
-            # Configurar gTTS para português brasileiro
-            self.tts_lang = 'pt-br'  # Português brasileiro
-            self.tts_slow = False    # Velocidade normal (mais natural)
-            
-            self.logger.info("✅ Sistema de síntese de voz gTTS inicializado")
-            self.logger.info(f"🌍 Idioma configurado: {self.tts_lang}")
-        except Exception as e:
-            self.logger.warning(f"⚠️  Erro ao inicializar gTTS: {e}")
-            self.logger.info("💡 Respostas por voz não estarão disponíveis")
-            self.tts_lang = None
+        # TTS desabilitado por enquanto - descomente quando quiser usar
+        self.tts_lang = None
+        self.tts_slow = False
+        self.logger.info("🔇 Sistema de síntese de voz desabilitado")
+        
+        # Código original comentado para uso futuro:
+        # try:
+        #     # Configurar gTTS para português brasileiro
+        #     self.tts_lang = 'pt-br'  # Português brasileiro
+        #     self.tts_slow = False    # Velocidade normal (mais natural)
+        #     
+        #     self.logger.info("✅ Sistema de síntese de voz gTTS inicializado")
+        #     self.logger.info(f"🌍 Idioma configurado: {self.tts_lang}")
+        # except Exception as e:
+        #     self.logger.warning(f"⚠️  Erro ao inicializar gTTS: {e}")
+        #     self.logger.info("💡 Respostas por voz não estarão disponíveis")
+        #     self.tts_lang = None
     
     def _play_activation_sound(self):
         """Reproduz o som de ativação"""
@@ -97,18 +103,23 @@ class JarvisFinal:
         except Exception as e:
             self.logger.warning(f"⚠️  Erro ao reproduzir som: {e}")
     
-    def _speak(self, text: str):
-        """Fala o texto usando gTTS"""
-        if self.tts_lang:
+    def _speak(self, text: str, force_speak: bool = False):
+        """Fala o texto usando gTTS - apenas para comando olá"""
+        if force_speak:
+            # Apenas para o comando olá - ativa TTS temporariamente
             try:
                 self.logger.info(f"🗣️  Falando: {text}")
+                
+                # Configurar gTTS temporariamente
+                tts_lang = 'pt-br'
+                tts_slow = False
                 
                 # Criar arquivo temporário para o áudio
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
                     temp_path = tmp_file.name
                 
                 # Gerar áudio com gTTS
-                tts = gTTS(text=text, lang=self.tts_lang, slow=self.tts_slow)
+                tts = gTTS(text=text, lang=tts_lang, slow=tts_slow)
                 tts.save(temp_path)
                 
                 # Reproduzir o áudio
@@ -126,7 +137,38 @@ class JarvisFinal:
                 self.logger.warning(f"⚠️  Erro ao falar com gTTS: {e}")
                 self.logger.info(f"💬 {text}")
         else:
-            self.logger.info(f"💬 {text}")
+            # Para todos os outros comandos - apenas log
+            self.logger.info(f"💬 [TTS DESABILITADO] {text}")
+        
+        # Código original comentado para uso futuro:
+        # if self.tts_lang:
+        #     try:
+        #         self.logger.info(f"🗣️  Falando: {text}")
+        #         
+        #         # Criar arquivo temporário para o áudio
+        #         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
+        #             temp_path = tmp_file.name
+        #         
+        #         # Gerar áudio com gTTS
+        #         tts = gTTS(text=text, lang=self.tts_lang, slow=self.tts_slow)
+        #         tts.save(temp_path)
+        #         
+        #         # Reproduzir o áudio
+        #         pygame.mixer.music.load(temp_path)
+        #         pygame.mixer.music.play()
+        #         
+        #         # Aguardar a reprodução terminar
+        #         while pygame.mixer.music.get_busy():
+        #             pygame.time.wait(100)
+        #         
+        #         # Limpar arquivo temporário
+        #         os.unlink(temp_path)
+        #         
+        #     except Exception as e:
+        #         self.logger.warning(f"⚠️  Erro ao falar com gTTS: {e}")
+        #         self.logger.info(f"💬 {text}")
+        # else:
+        #     self.logger.info(f"💬 {text}")
     
     def _get_greeting(self):
         """Retorna saudação baseada na hora"""
@@ -212,7 +254,8 @@ class JarvisFinal:
             "status": self._system_status,
             "olá": self._greeting_command,
             "ola": self._greeting_command,
-            "trabalho": self._work_mode_command
+            "trabalho": self._work_mode_command,
+            "desliga": self._shutdown_command
         }
         
         self.logger.info(f"📋 Mapeamento de comandos inicializado com {len(self.commands)} comandos")
@@ -383,7 +426,7 @@ class JarvisFinal:
         """Mostra a hora atual"""
         time_str = self._get_time_string()
         self.logger.info(f"🕐 Hora atual: {time_str}")
-        self._speak(f"São {time_str}")
+        # self._speak(f"São {time_str}")  # TTS desabilitado
     
     def _show_date(self):
         """Mostra a data atual"""
@@ -416,13 +459,28 @@ class JarvisFinal:
         message = f"{greeting} Gustavo, são {time_str} e você ainda não ficou rico, bora trabalhar?"
         
         self.logger.info(f"👋 {message}")
-        self._speak(message)
+        self._speak(message, force_speak=True)  # Único comando que mantém fala ativa
     
     def _show_help(self):
         """Mostra comandos disponíveis"""
         self.logger.info("📋 Comandos disponíveis:")
+        
+        command_descriptions = {
+            "teste": "Testa se o Jarvis está funcionando",
+            "hora": "Mostra a hora atual",
+            "data": "Mostra a data atual",
+            "ajuda": "Lista todos os comandos disponíveis",
+            "navegador": "Abre o navegador Chrome",
+            "arquivos": "Lista arquivos do diretório atual",
+            "status": "Mostra status do sistema",
+            "olá": "Saudação personalizada",
+            "trabalho": "Abre aplicativos de trabalho",
+            "desliga": "Desliga o computador completamente"
+        }
+        
         for command in sorted(self.commands.keys()):
-            print(f"   - {command}")
+            description = command_descriptions.get(command, "Comando disponível")
+            print(f"   - {command}: {description}")
     
     def _work_mode_command(self):
         """Abre todos os aplicativos de trabalho"""
@@ -459,12 +517,35 @@ class JarvisFinal:
         if failed_apps:
             self.logger.warning(f"❌ Falha ao abrir: {', '.join(failed_apps)}")
         
-        # Resposta por voz
+        # Resposta por voz desabilitada
         if opened_apps:
-            self._speak("bora trabalhar")
+            self.logger.info("💼 Aplicativos de trabalho abertos!")
         else:
             self.logger.error("❌ Nenhum aplicativo foi aberto")
-            self._speak("Desculpe, não consegui abrir os aplicativos de trabalho.")
+            self.logger.info("💡 Desculpe, não consegui abrir os aplicativos de trabalho.")
+    
+    def _shutdown_command(self):
+        """Desliga o computador completamente"""
+        self.logger.info("🔌 Comando de desligamento recebido...")
+        
+        # Confirmação por voz desabilitada
+        self.logger.info("🔌 Desligando o computador em 5 segundos...")
+        
+        # Aguarda 5 segundos
+        for i in range(5, 0, -1):
+            self.logger.info(f"⏰ Desligando em {i} segundos...")
+            time.sleep(1)
+        
+        try:
+            # Comando para desligar o sistema
+            self.logger.info("🔌 Executando comando de desligamento...")
+            subprocess.run(["sudo", "shutdown", "-h", "now"], check=True)
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"❌ Erro ao desligar: {e}")
+            self.logger.info("💡 Desculpe, não consegui desligar o computador. Verifique as permissões.")
+        except Exception as e:
+            self.logger.error(f"❌ Erro inesperado: {e}")
+            self.logger.info("💡 Ocorreu um erro ao tentar desligar o computador.")
 
 
 def main():
