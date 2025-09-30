@@ -106,11 +106,11 @@ Diga **"Jarvis"** seguido de um destes comandos:
 | `data` | Mostra a data atual |
 | `ajuda` | Lista todos os comandos disponíveis |
 | `navegador` | Abre o navegador Chrome |
-| `arquivos` | Lista arquivos do diretório atual |
 | `status` | Mostra status do sistema |
 | `olá` | Saudação personalizada |
 | `trabalho` | Abre aplicativos de trabalho |
 | `desliga` | Desliga o computador completamente |
+| `fechar` | Encerra o Jarvis |
 
 ### Exemplo de Uso
 
@@ -287,3 +287,4 @@ Se encontrar problemas:
 ---
 
 **Desenvolvido com ❤️ para a comunidade Linux**
+

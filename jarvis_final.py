@@ -250,12 +250,12 @@ class JarvisFinal:
             "data": self._show_date,
             "ajuda": self._show_help,
             "navegador": self._open_browser,
-            "arquivos": self._list_files,
             "status": self._system_status,
             "olá": self._greeting_command,
             "ola": self._greeting_command,
             "trabalho": self._work_mode_command,
-            "desliga": self._shutdown_command
+            "desliga": self._shutdown_command,
+            "fechar": self._close_jarvis
         }
         
         self.logger.info(f"📋 Mapeamento de comandos inicializado com {len(self.commands)} comandos")
@@ -439,13 +439,6 @@ class JarvisFinal:
         subprocess.run(["xdg-open", "https://www.google.com"], check=False)
         self.logger.info("🌐 Navegador aberto")
     
-    def _list_files(self):
-        """Lista arquivos do diretório atual"""
-        result = subprocess.run(["ls", "-la"], capture_output=True, text=True)
-        if result.returncode == 0:
-            self.logger.info("📁 Arquivos no diretório atual:")
-            print(result.stdout)
-    
     def _system_status(self):
         """Mostra status do sistema"""
         result = subprocess.run(["uptime"], capture_output=True, text=True)
@@ -456,7 +449,7 @@ class JarvisFinal:
         """Comando de saudação personalizado"""
         greeting = self._get_greeting()
         time_str = self._get_time_string()
-        message = f"{greeting} Gustavo, são {time_str} e você ainda não ficou rico, bora trabalhar?"
+        message = f"{greeting} Gustavo, são {time_str}."
         
         self.logger.info(f"👋 {message}")
         self._speak(message, force_speak=True)  # Único comando que mantém fala ativa
@@ -471,11 +464,11 @@ class JarvisFinal:
             "data": "Mostra a data atual",
             "ajuda": "Lista todos os comandos disponíveis",
             "navegador": "Abre o navegador Chrome",
-            "arquivos": "Lista arquivos do diretório atual",
             "status": "Mostra status do sistema",
             "olá": "Saudação personalizada",
             "trabalho": "Abre aplicativos de trabalho",
-            "desliga": "Desliga o computador completamente"
+            "desliga": "Desliga o computador completamente",
+            "fechar": "Encerra o Jarvis"
         }
         
         for command in sorted(self.commands.keys()):
@@ -486,15 +479,26 @@ class JarvisFinal:
         """Abre todos os aplicativos de trabalho"""
         self.logger.info("💼 Iniciando modo de trabalho...")
         
+        # Tocar som de trabalho
+        try:
+            self.logger.info("🔊 Reproduzindo som de trabalho...")
+            pygame.mixer.music.load("muhehe.mp3")
+            pygame.mixer.music.play()
+            
+            # Aguardar a reprodução terminar
+            while pygame.mixer.music.get_busy():
+                pygame.time.wait(100)
+                
+            self.logger.info("✅ Som de trabalho reproduzido")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao reproduzir som de trabalho: {e}")
+        
         # Lista de aplicativos para abrir
         apps = [
             ("Slack", ["slack"]),
             ("Spotify", ["spotify"]),
             ("Cursor", ["cursor"]),
-            ("Navegador", ["google-chrome"]),
-            ("ChatGPT", ["google-chrome", "--app=https://chat.openai.com"]),
-            ("CopyQ", ["copyq"]),
-            ("Excalidraw", ["google-chrome", "--app=https://excalidraw.com"])
+            ("Navegador", ["google-chrome"])
         ]
         
         opened_apps = []
@@ -546,6 +550,35 @@ class JarvisFinal:
         except Exception as e:
             self.logger.error(f"❌ Erro inesperado: {e}")
             self.logger.info("💡 Ocorreu um erro ao tentar desligar o computador.")
+    
+    def _close_jarvis(self):
+        """Fecha o Jarvis com som de despedida"""
+        self.logger.info("👋 Comando de fechamento recebido...")
+        
+        # Tocar som de fechamento
+        try:
+            self.logger.info("🔊 Reproduzindo som de despedida...")
+            pygame.mixer.music.load("fechar.mp3")
+            pygame.mixer.music.play()
+            
+            # Aguardar a reprodução terminar
+            while pygame.mixer.music.get_busy():
+                pygame.time.wait(100)
+                
+            self.logger.info("✅ Som de despedida reproduzido")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao reproduzir som de fechamento: {e}")
+        
+        # Parar a escuta
+        self.logger.info("🔌 Encerrando Jarvis...")
+        self.is_listening = False
+        
+        # Log de despedida
+        self.logger.info("✅ Jarvis encerrado com sucesso!")
+        print("\n👋 Jarvis encerrado. Até logo!")
+        
+        # Encerrar o programa
+        exit(0)
 
 
 def main():
