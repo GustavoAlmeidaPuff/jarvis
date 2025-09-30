@@ -32,6 +32,12 @@ class JarvisFinal:
         self.is_listening = False
         self.is_processing_command = False
         
+        # Configurações personalizáveis
+        self.nome = "Gustavo"  # Nome para personalização
+        
+        # Iniciar cmatrix em tela separada
+        self._start_cmatrix()
+        
         # Configuração de áudio
         self.sample_rate = 16000
         self.chunk_size = 1024
@@ -449,7 +455,7 @@ class JarvisFinal:
         """Comando de saudação personalizado"""
         greeting = self._get_greeting()
         time_str = self._get_time_string()
-        message = f"{greeting} Gustavo, são {time_str}."
+        message = f"{greeting} {self.nome}, são {time_str}."
         
         self.logger.info(f"👋 {message}")
         self._speak(message, force_speak=True)  # Único comando que mantém fala ativa
