@@ -55,6 +55,9 @@ class JarvisFinal:
         self._init_vosk(model_path)
         self._init_command_mapping()
         
+        # Tocar som de inicialização
+        self._play_startup_sound()
+        
         self.logger.info("Jarvis Final inicializado com sucesso!")
     
     def _setup_logging(self):
@@ -97,6 +100,24 @@ class JarvisFinal:
         #     self.logger.warning(f"⚠️  Erro ao inicializar gTTS: {e}")
         #     self.logger.info("💡 Respostas por voz não estarão disponíveis")
         #     self.tts_lang = None
+    
+    def _play_startup_sound(self):
+        """Reproduz som de inicialização"""
+        try:
+            sound_file = os.path.join(os.getcwd(), 'ligar.mp3')
+            if os.path.exists(sound_file):
+                pygame.mixer.music.load(sound_file)
+                pygame.mixer.music.play()
+                
+                # Aguardar a reprodução terminar
+                while pygame.mixer.music.get_busy():
+                    pygame.time.wait(100)
+                    
+                self.logger.info("✅ Som de inicialização reproduzido")
+            else:
+                self.logger.warning(f"⚠️  Arquivo de som de inicialização não encontrado: {sound_file}")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao reproduzir som de inicialização: {e}")
     
     def _play_activation_sound(self):
         """Reproduz o som de ativação"""
@@ -262,6 +283,9 @@ class JarvisFinal:
             "olá": self._greeting_command,
             "ola": self._greeting_command,
             "trabalho": self._work_mode_command,
+            "música": self._open_music,
+            "musica": self._open_music,
+            "biblioteca": self._open_library,
             "desliga": self._shutdown_command,
             "fechar": self._close_jarvis
         }
@@ -558,6 +582,9 @@ class JarvisFinal:
             "status": "Mostra status do sistema",
             "olá": "Saudação personalizada",
             "trabalho": "Abre aplicativos de trabalho",
+            "música": "Abre o Spotify",
+            "musica": "Abre o Spotify",
+            "biblioteca": "Abre Cursor na pasta Bibliotech",
             "desliga": "Desliga o computador completamente",
             "fechar": "Encerra o Jarvis"
         }
@@ -618,6 +645,150 @@ class JarvisFinal:
         else:
             self.logger.error("❌ Nenhum aplicativo foi aberto")
             self.logger.info("💡 Desculpe, não consegui abrir os aplicativos de trabalho.")
+    
+    def _open_library(self):
+        """Abre Cursor na pasta Bibliotech"""
+        try:
+            library_path = os.path.expanduser("~/code/Bibliotech")
+            self.logger.info(f"📁 Caminho da biblioteca: {library_path}")
+            
+            # Verificar se a pasta existe
+            if not os.path.exists(library_path):
+                self.logger.warning(f"⚠️  Pasta não encontrada: {library_path}")
+                self.logger.info("💡 Criando pasta Bibliotech...")
+                os.makedirs(library_path, exist_ok=True)
+                self.logger.info("✅ Pasta Bibliotech criada!")
+            else:
+                self.logger.info("✅ Pasta Bibliotech já existe")
+            
+            # Abrir Cursor na pasta usando diferentes métodos
+            self.logger.info(f"📚 Abrindo Cursor na pasta Bibliotech...")
+            
+            # Método 1: Usar os.system (mais robusto com interferência de áudio)
+            self.logger.info("🔄 Tentativa 1: Usando os.system...")
+            try:
+                cmd = f"cd '{library_path}' && cursor . &"
+                result = os.system(cmd)
+                if result == 0:
+                    self.logger.info("✅ Cursor aberto com os.system!")
+                    time.sleep(1)
+                    # Tentar focar a janela
+                    os.system("wmctrl -a 'Bibliotech' 2>/dev/null || true")
+                    self.logger.info("🎉 Biblioteca aberta com sucesso!")
+                    return
+                else:
+                    self.logger.warning(f"⚠️  os.system retornou código: {result}")
+            except Exception as e:
+                self.logger.warning(f"⚠️  Erro com os.system: {e}")
+            
+            # Método 2: Script temporário
+            self.logger.info("🔄 Tentativa 2: Usando script temporário...")
+            script_path = "/tmp/jarvis_open_cursor.sh"
+            try:
+                with open(script_path, "w") as f:
+                    f.write("#!/bin/bash\n")
+                    f.write(f"cd '{library_path}'\n")
+                    f.write("cursor . &\n")
+                    f.write("sleep 1\n")
+                    f.write("wmctrl -a 'Bibliotech' 2>/dev/null || true\n")
+                
+                # Tornar executável
+                os.chmod(script_path, 0o755)
+                
+                # Executar o script
+                result = subprocess.run([script_path], 
+                                      capture_output=True, 
+                                      text=True, 
+                                      timeout=10)
+                
+                if result.returncode == 0:
+                    self.logger.info("✅ Script executado com sucesso!")
+                    self.logger.info("🎉 Biblioteca aberta com sucesso!")
+                    return
+                else:
+                    self.logger.warning(f"⚠️  Script retornou código: {result.returncode}")
+                    if result.stderr:
+                        self.logger.warning(f"Erro: {result.stderr}")
+                        
+            except subprocess.TimeoutExpired:
+                self.logger.warning("⚠️  Script demorou muito para executar")
+            except Exception as e:
+                self.logger.warning(f"⚠️  Erro ao executar script: {e}")
+            
+            # Método 3: Fallback com subprocess.Popen
+            self.logger.info("🔄 Tentativa 3: Usando subprocess.Popen...")
+            try:
+                process = subprocess.Popen(["cursor", library_path], 
+                                         stdout=subprocess.DEVNULL, 
+                                         stderr=subprocess.DEVNULL)
+                time.sleep(2)
+                
+                if process.poll() is None:
+                    self.logger.info("✅ Cursor aberto via subprocess!")
+                    self.logger.info("🎉 Biblioteca aberta com sucesso!")
+                else:
+                    self.logger.error("❌ Todos os métodos falharam")
+                    self.logger.info("💡 Tente executar manualmente: cursor ~/code/Bibliotech")
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Erro no subprocess: {e}")
+                self.logger.info("💡 Tente executar manualmente: cursor ~/code/Bibliotech")
+            
+            # Limpar script temporário
+            try:
+                os.remove(script_path)
+            except:
+                pass
+            
+        except Exception as e:
+            self.logger.error(f"❌ Erro inesperado: {e}")
+            self.logger.info("💡 Não foi possível abrir a biblioteca")
+    
+    def _open_music(self):
+        """Abre o Spotify para música"""
+        try:
+            self.logger.info("🎵 Abrindo Spotify...")
+            
+            # Método 1: Usar os.system (mais robusto)
+            self.logger.info("🔄 Tentativa 1: Usando os.system...")
+            try:
+                cmd = "spotify &"
+                result = os.system(cmd)
+                if result == 0:
+                    self.logger.info("✅ Spotify aberto com os.system!")
+                    time.sleep(1)
+                    # Tentar focar a janela do Spotify
+                    os.system("wmctrl -a 'Spotify' 2>/dev/null || true")
+                    self.logger.info("🎉 Spotify aberto com sucesso!")
+                    return
+                else:
+                    self.logger.warning(f"⚠️  os.system retornou código: {result}")
+            except Exception as e:
+                self.logger.warning(f"⚠️  Erro com os.system: {e}")
+            
+            # Método 2: Fallback com subprocess.Popen
+            self.logger.info("🔄 Tentativa 2: Usando subprocess.Popen...")
+            try:
+                process = subprocess.Popen(["spotify"], 
+                                         stdout=subprocess.DEVNULL, 
+                                         stderr=subprocess.DEVNULL)
+                time.sleep(2)
+                
+                if process.poll() is None:
+                    self.logger.info("✅ Spotify aberto via subprocess!")
+                    self.logger.info("🎉 Spotify aberto com sucesso!")
+                else:
+                    self.logger.error("❌ Não foi possível abrir o Spotify")
+                    self.logger.info("💡 Verifique se o Spotify está instalado")
+                    self.logger.info("💡 Tente executar manualmente: spotify")
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Erro no subprocess: {e}")
+                self.logger.info("💡 Tente executar manualmente: spotify")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Erro inesperado: {e}")
+            self.logger.info("💡 Não foi possível abrir o Spotify")
     
     def _shutdown_command(self):
         """Desliga o computador completamente"""

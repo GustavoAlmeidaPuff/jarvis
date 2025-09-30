@@ -109,6 +109,8 @@ Diga **"Jarvis"** seguido de um destes comandos:
 | `status` | Mostra status do sistema |
 | `olá` | Saudação personalizada |
 | `trabalho` | Abre aplicativos de trabalho |
+| `música` / `musica` | Abre o Spotify |
+| `biblioteca` | Abre Cursor na pasta Bibliotech |
 | `desliga` | Desliga o computador completamente |
 | `fechar` | Encerra o Jarvis |
 
