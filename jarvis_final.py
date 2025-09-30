@@ -34,9 +34,8 @@ class JarvisFinal:
         
         # Configurações personalizáveis
         self.nome = "Gustavo"  # Nome para personalização
-        
-        # Iniciar cmatrix em tela separada
-        self._start_cmatrix()
+        self.cmatrix_process = None  # Processo do cmatrix
+        self.cmatrix_control_file = "/tmp/jarvis_cmatrix_control"  # Arquivo de controle
         
         # Configuração de áudio
         self.sample_rate = 16000
@@ -45,6 +44,9 @@ class JarvisFinal:
         
         # Configuração de logging
         self._setup_logging()
+        
+        # Iniciar cmatrix em tela separada (após logger estar pronto)
+        self._start_cmatrix()
         
         # Inicialização dos componentes
         self._init_pygame()
@@ -265,6 +267,89 @@ class JarvisFinal:
         }
         
         self.logger.info(f"📋 Mapeamento de comandos inicializado com {len(self.commands)} comandos")
+    
+    def _start_cmatrix(self):
+        """Inicia cmatrix em uma tela separada"""
+        try:
+            self.logger.info("🖥️  Iniciando interface tecnológica (cmatrix)...")
+            
+            # Verificar se cmatrix está disponível
+            result = subprocess.run(["which", "cmatrix"], capture_output=True, text=True)
+            if result.returncode != 0:
+                self.logger.warning("⚠️  cmatrix não encontrado, continuando sem interface visual")
+                return
+            
+            # Criar arquivo de controle
+            with open(self.cmatrix_control_file, "w") as f:
+                f.write("RUNNING\n")
+            
+            # Criar script temporário para cmatrix
+            cmatrix_script = "/tmp/jarvis_cmatrix.sh"
+            with open(cmatrix_script, "w") as f:
+                f.write("#!/bin/bash\n")
+                f.write("CONTROL_FILE='" + self.cmatrix_control_file + "'\n")
+                f.write("trap 'echo STOPPED > $CONTROL_FILE; kill $CMATRIX_PID 2>/dev/null; exit 0' SIGTERM\n")
+                f.write("cmatrix -C green -s -a &\n")
+                f.write("CMATRIX_PID=$!\n")
+                f.write("while [ -f $CONTROL_FILE ] && [ \"$(cat $CONTROL_FILE)\" = \"RUNNING\" ]; do\n")
+                f.write("    sleep 0.1\n")
+                f.write("done\n")
+                f.write("kill $CMATRIX_PID 2>/dev/null\n")
+                f.write("rm -f $CONTROL_FILE\n")
+            
+            # Tornar executável
+            os.chmod(cmatrix_script, 0o755)
+            
+            # Iniciar cmatrix em terminal separado
+            cmatrix_cmd = [
+                "gnome-terminal", 
+                "--title=Jarvis Matrix Interface",
+                "--geometry=80x24",
+                "--",
+                "bash", cmatrix_script
+            ]
+            
+            # Tentar iniciar cmatrix e armazenar o processo
+            self.cmatrix_process = subprocess.Popen(cmatrix_cmd, 
+                                                   stdout=subprocess.DEVNULL, 
+                                                   stderr=subprocess.DEVNULL)
+            
+            self.logger.info("✅ Interface tecnológica iniciada!")
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao iniciar cmatrix: {e}")
+            self.logger.info("💡 Jarvis continuará funcionando normalmente")
+    
+    def _stop_cmatrix(self):
+        """Para o cmatrix se estiver rodando"""
+        try:
+            if os.path.exists(self.cmatrix_control_file):
+                self.logger.info("🖥️  Fechando interface tecnológica (cmatrix)...")
+                
+                # Sinalizar para parar via arquivo de controle
+                with open(self.cmatrix_control_file, "w") as f:
+                    f.write("STOPPED\n")
+                
+                # Aguardar um pouco para o script processar
+                time.sleep(1)
+                
+                # Limpar arquivo de controle
+                if os.path.exists(self.cmatrix_control_file):
+                    os.remove(self.cmatrix_control_file)
+                
+                # Matar processos relacionados como fallback
+                subprocess.run(["pkill", "-f", "jarvis_cmatrix.sh"], 
+                             capture_output=True, timeout=1)
+                subprocess.run(["pkill", "-f", "cmatrix"], 
+                             capture_output=True, timeout=1)
+                
+                self.logger.info("✅ Interface tecnológica fechada!")
+            else:
+                self.logger.info("💡 Interface tecnológica já estava fechada")
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️  Erro ao fechar cmatrix: {e}")
+            self.logger.info("💡 Continuando com o fechamento do Jarvis...")
     
     def _audio_callback(self, indata, frames, time, status):
         """Callback para captura de áudio"""
@@ -560,6 +645,9 @@ class JarvisFinal:
     def _close_jarvis(self):
         """Fecha o Jarvis com som de despedida"""
         self.logger.info("👋 Comando de fechamento recebido...")
+        
+        # Fechar cmatrix se estiver rodando
+        self._stop_cmatrix()
         
         # Tocar som de fechamento
         try:
