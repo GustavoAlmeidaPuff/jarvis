@@ -15,8 +15,10 @@ from typing import Dict, Callable, Optional
 import sounddevice as sd
 import numpy as np
 import pvporcupine
-import vosk
+import whisper
+import difflib
 from pathlib import Path
+from gestures import GestureController
 import pygame
 from gtts import gTTS
 import tempfile
@@ -27,7 +29,7 @@ from datetime import datetime
 class JarvisFinal:
     """Versão final do assistente Jarvis"""
     
-    def __init__(self, hotword: str = "jarvis", model_path: str = None):
+    def __init__(self, hotword: str = "jarvis"):
         self.hotword = hotword.lower()
         self.is_listening = False
         self.is_processing_command = False
@@ -52,8 +54,9 @@ class JarvisFinal:
         self._init_pygame()
         self._init_tts()
         self._init_porcupine()
-        self._init_vosk(model_path)
+        self._init_whisper()
         self._init_command_mapping()
+        self._init_gestures()
         
         # Tocar som de inicialização
         self._play_startup_sound()
@@ -224,52 +227,41 @@ class JarvisFinal:
             if not access_key:
                 raise Exception("Chave de acesso do Porcupine não configurada")
             
-            # Usar hotword padrão "jarvis" do Porcupine
+                # Usar modelo customizado treinado em português com sensitivity alta
+            base_dir = os.path.dirname(__file__)
+            keyword_path = os.path.join(base_dir, 'jarvis_pt_linux_v4_0_0.ppn')
+            model_path = os.path.join(base_dir, 'porcupine_params_pt.pv')
             self.porcupine = pvporcupine.create(
                 access_key=access_key,
-                keywords=['jarvis']  # Sempre usar 'jarvis'
+                keyword_paths=[keyword_path],
+                model_path=model_path,
+                sensitivities=[0.85]
             )
-            self.logger.info(f"✅ Porcupine inicializado com hotword: jarvis")
+            self.logger.info(f"✅ Porcupine inicializado com modelo customizado PT (sensitivity=0.85)")
         except Exception as e:
             self.logger.error(f"❌ Erro ao inicializar Porcupine: {e}")
             self.logger.info("Usando modo de teste sem Porcupine")
             self.porcupine = None
     
-    def _init_vosk(self, model_path: str = None):
-        """Inicializa o Vosk para reconhecimento de voz"""
+    def _init_gestures(self):
+        """Inicializa o controlador de gestos"""
         try:
-            if model_path is None:
-                model_path = self._find_vosk_model()
-            
-            if model_path and os.path.exists(model_path):
-                self.vosk_model = vosk.Model(model_path)
-                self.vosk_recognizer = vosk.KaldiRecognizer(self.vosk_model, self.sample_rate)
-                self.logger.info(f"✅ Vosk inicializado com modelo: {model_path}")
-            else:
-                self.logger.warning("⚠️  Modelo Vosk não encontrado. Usando modo de teste.")
-                self.vosk_model = None
-                self.vosk_recognizer = None
+            self.gesture_controller = GestureController()
+            self.gesture_controller.start()
+            self.logger.info("✅ Controle por gestos iniciado")
         except Exception as e:
-            self.logger.error(f"❌ Erro ao inicializar Vosk: {e}")
-            self.vosk_model = None
-            self.vosk_recognizer = None
-    
-    def _find_vosk_model(self) -> Optional[str]:
-        """Tenta encontrar um modelo Vosk instalado"""
-        possible_paths = [
-            "/usr/share/vosk-models",
-            "/usr/local/share/vosk-models",
-            os.path.expanduser("~/vosk-models"),
-            "./vosk-models"
-        ]
-        
-        for base_path in possible_paths:
-            if os.path.exists(base_path):
-                for model_dir in os.listdir(base_path):
-                    model_path = os.path.join(base_path, model_dir)
-                    if os.path.isdir(model_path):
-                        return model_path
-        return None
+            self.logger.warning(f"⚠️  Gestos não disponíveis: {e}")
+            self.gesture_controller = None
+
+    def _init_whisper(self):
+        """Inicializa o Whisper para reconhecimento de voz"""
+        try:
+            self.logger.info("🔄 Carregando modelo Whisper (base)...")
+            self.whisper_model = whisper.load_model("base")
+            self.logger.info("✅ Whisper inicializado com modelo 'base'")
+        except Exception as e:
+            self.logger.error(f"❌ Erro ao inicializar Whisper: {e}")
+            self.whisper_model = None
     
     def _init_command_mapping(self):
         """Inicializa o mapeamento de comandos"""
@@ -285,7 +277,7 @@ class JarvisFinal:
             "trabalho": self._work_mode_command,
             "música": self._open_music,
             "musica": self._open_music,
-            "biblioteca": self._open_library,
+            "ligar aura": self._play_aura,
             "desliga": self._shutdown_command,
             "fechar": self._close_jarvis
         }
@@ -405,39 +397,69 @@ class JarvisFinal:
             self.logger.error(f"Erro na detecção de hotword: {e}")
             return False
     
-    def _recognize_speech(self, audio_data: bytes) -> str:
-        """Reconhece fala usando Vosk"""
-        if self.vosk_recognizer is None:
-            return "teste"  # Comando padrão para teste
-        
+    def _recognize_speech(self, audio_float32: np.ndarray) -> str:
+        """Reconhece fala usando Whisper"""
+        if self.whisper_model is None:
+            return ""
+
+        # Checa energia do áudio — rejeita se for silêncio/ruído
+        rms = float(np.sqrt(np.mean(audio_float32 ** 2)))
+        self.logger.info(f"🔊 RMS do áudio: {rms:.4f}")
+        if rms < 0.01:
+            self.logger.info("🔇 Áudio muito fraco, ignorando")
+            return ""
+
         try:
-            if self.vosk_recognizer.AcceptWaveform(audio_data):
-                result = json.loads(self.vosk_recognizer.Result())
-                text = result.get('text', '').strip().lower()
-                return text
-            else:
-                partial = json.loads(self.vosk_recognizer.PartialResult())
-                partial_text = partial.get('partial', '').strip().lower()
-                return partial_text
+            result = self.whisper_model.transcribe(
+                audio_float32,
+                language="pt",
+                fp16=False,
+                no_speech_threshold=0.6,
+                condition_on_previous_text=False,
+                temperature=0.0
+            )
+            # Se probabilidade de "sem fala" for alta, ignora
+            segments = result.get("segments", [])
+            if segments and segments[0].get("no_speech_prob", 0) > 0.5:
+                self.logger.info("🔇 Whisper detectou ausência de fala")
+                return ""
+
+            text = result.get("text", "").strip().lower()
+            for ch in ".,!?;:":
+                text = text.replace(ch, "")
+            self.logger.info(f"🎤 Whisper transcreveu: '{text}'")
+            return text
         except Exception as e:
-            self.logger.error(f"Erro no reconhecimento de voz: {e}")
+            self.logger.error(f"Erro no reconhecimento Whisper: {e}")
             return ""
     
     def _find_command(self, text: str) -> Optional[str]:
-        """Encontra comando correspondente"""
+        """Encontra comando correspondente com fuzzy matching"""
         if not text:
             return None
-        
+
         # Busca exata
         if text in self.commands:
             return text
-        
-        # Busca por palavras-chave
-        words = text.split()
-        for word in words:
-            if word in self.commands:
-                return word
-        
+
+        # Busca por substring (comando dentro do texto)
+        for cmd in self.commands:
+            if cmd in text:
+                return cmd
+
+        # Fuzzy matching — pega o comando mais similar
+        matches = difflib.get_close_matches(text, self.commands.keys(), n=1, cutoff=0.5)
+        if matches:
+            self.logger.info(f"🔍 Fuzzy match: '{text}' → '{matches[0]}'")
+            return matches[0]
+
+        # Fuzzy por palavra individual do texto
+        for word in text.split():
+            matches = difflib.get_close_matches(word, self.commands.keys(), n=1, cutoff=0.6)
+            if matches:
+                self.logger.info(f"🔍 Fuzzy word match: '{word}' → '{matches[0]}'")
+                return matches[0]
+
         return None
     
     def _execute_command(self, command: str):
@@ -457,41 +479,40 @@ class JarvisFinal:
     
     def _listen_for_command(self):
         """Escuta por comandos após detecção da hotword"""
-        self.logger.info("🎤 Escutando comando... (fale devagar e claramente)")
+        self.logger.info("🎤 Escutando comando...")
         self.is_processing_command = True
-        
-        # Usar o mesmo método que funciona no manual
-        duration = 4
-        audio_data = sd.rec(int(duration * self.sample_rate), 
-                           samplerate=self.sample_rate, 
-                           channels=1, 
-                           dtype=np.float32)
-        sd.wait()
-        
-        # Converter para formato correto
-        audio_int16 = (audio_data * 32767).astype(np.int16)
-        command_audio = audio_int16.tobytes()
-        
-        # Reconhecer o comando
-        recognized_text = self._recognize_speech(command_audio)
-        
-        if recognized_text:
-            self.logger.info(f"🎤 Texto reconhecido: '{recognized_text}'")
-            
-            # Encontrar e executar comando
-            command = self._find_command(recognized_text)
-            if command:
-                self._execute_command(command)
+
+        try:
+            # Grava até 5 segundos com detecção de silêncio
+            duration = 5
+            audio_data = sd.rec(int(duration * self.sample_rate),
+                               samplerate=self.sample_rate,
+                               channels=1,
+                               dtype=np.float32)
+            sd.wait()
+
+            audio_flat = audio_data.flatten()
+
+            # Corta o silêncio do final
+            silence_threshold = 0.01
+            non_silent = np.where(np.abs(audio_flat) > silence_threshold)[0]
+            if len(non_silent) > 0:
+                end = min(non_silent[-1] + int(self.sample_rate * 0.5), len(audio_flat))
+                audio_flat = audio_flat[:end]
+
+            recognized_text = self._recognize_speech(audio_flat)
+
+            if recognized_text:
+                command = self._find_command(recognized_text)
+                if command:
+                    self._execute_command(command)
+                else:
+                    self.logger.info(f"❓ Comando não reconhecido: '{recognized_text}'")
+                    self.logger.info(f"💡 Comandos: {', '.join(sorted(self.commands.keys()))}")
             else:
-                self.logger.info("❓ Comando não reconhecido")
-                self.logger.info("💡 Comandos disponíveis:")
-                for cmd in sorted(self.commands.keys()):
-                    print(f"   - {cmd}")
-        else:
-            self.logger.info("❌ Nenhum comando reconhecido")
-            self.logger.info("💡 Tente falar mais devagar e claramente")
-        
-        self.is_processing_command = False
+                self.logger.info("❌ Não entendi o comando, tente novamente")
+        finally:
+            self.is_processing_command = False
     
     def start_listening(self):
         """Inicia o loop principal de escuta"""
@@ -584,7 +605,7 @@ class JarvisFinal:
             "trabalho": "Abre aplicativos de trabalho",
             "música": "Abre o Spotify",
             "musica": "Abre o Spotify",
-            "biblioteca": "Abre Cursor na pasta Bibliotech",
+            "ligar aura": "Toca Aura no Spotify",
             "desliga": "Desliga o computador completamente",
             "fechar": "Encerra o Jarvis"
         }
@@ -646,104 +667,16 @@ class JarvisFinal:
             self.logger.error("❌ Nenhum aplicativo foi aberto")
             self.logger.info("💡 Desculpe, não consegui abrir os aplicativos de trabalho.")
     
-    def _open_library(self):
-        """Abre Cursor na pasta Bibliotech"""
+    def _play_aura(self):
+        """Toca Aura no Spotify"""
         try:
-            library_path = os.path.expanduser("~/code/Bibliotech")
-            self.logger.info(f"📁 Caminho da biblioteca: {library_path}")
-            
-            # Verificar se a pasta existe
-            if not os.path.exists(library_path):
-                self.logger.warning(f"⚠️  Pasta não encontrada: {library_path}")
-                self.logger.info("💡 Criando pasta Bibliotech...")
-                os.makedirs(library_path, exist_ok=True)
-                self.logger.info("✅ Pasta Bibliotech criada!")
-            else:
-                self.logger.info("✅ Pasta Bibliotech já existe")
-            
-            # Abrir Cursor na pasta usando diferentes métodos
-            self.logger.info(f"📚 Abrindo Cursor na pasta Bibliotech...")
-            
-            # Método 1: Usar os.system (mais robusto com interferência de áudio)
-            self.logger.info("🔄 Tentativa 1: Usando os.system...")
-            try:
-                cmd = f"cd '{library_path}' && cursor . &"
-                result = os.system(cmd)
-                if result == 0:
-                    self.logger.info("✅ Cursor aberto com os.system!")
-                    time.sleep(1)
-                    # Tentar focar a janela
-                    os.system("wmctrl -a 'Bibliotech' 2>/dev/null || true")
-                    self.logger.info("🎉 Biblioteca aberta com sucesso!")
-                    return
-                else:
-                    self.logger.warning(f"⚠️  os.system retornou código: {result}")
-            except Exception as e:
-                self.logger.warning(f"⚠️  Erro com os.system: {e}")
-            
-            # Método 2: Script temporário
-            self.logger.info("🔄 Tentativa 2: Usando script temporário...")
-            script_path = "/tmp/jarvis_open_cursor.sh"
-            try:
-                with open(script_path, "w") as f:
-                    f.write("#!/bin/bash\n")
-                    f.write(f"cd '{library_path}'\n")
-                    f.write("cursor . &\n")
-                    f.write("sleep 1\n")
-                    f.write("wmctrl -a 'Bibliotech' 2>/dev/null || true\n")
-                
-                # Tornar executável
-                os.chmod(script_path, 0o755)
-                
-                # Executar o script
-                result = subprocess.run([script_path], 
-                                      capture_output=True, 
-                                      text=True, 
-                                      timeout=10)
-                
-                if result.returncode == 0:
-                    self.logger.info("✅ Script executado com sucesso!")
-                    self.logger.info("🎉 Biblioteca aberta com sucesso!")
-                    return
-                else:
-                    self.logger.warning(f"⚠️  Script retornou código: {result.returncode}")
-                    if result.stderr:
-                        self.logger.warning(f"Erro: {result.stderr}")
-                        
-            except subprocess.TimeoutExpired:
-                self.logger.warning("⚠️  Script demorou muito para executar")
-            except Exception as e:
-                self.logger.warning(f"⚠️  Erro ao executar script: {e}")
-            
-            # Método 3: Fallback com subprocess.Popen
-            self.logger.info("🔄 Tentativa 3: Usando subprocess.Popen...")
-            try:
-                process = subprocess.Popen(["cursor", library_path], 
-                                         stdout=subprocess.DEVNULL, 
-                                         stderr=subprocess.DEVNULL)
-                time.sleep(2)
-                
-                if process.poll() is None:
-                    self.logger.info("✅ Cursor aberto via subprocess!")
-                    self.logger.info("🎉 Biblioteca aberta com sucesso!")
-                else:
-                    self.logger.error("❌ Todos os métodos falharam")
-                    self.logger.info("💡 Tente executar manualmente: cursor ~/code/Bibliotech")
-                    
-            except Exception as e:
-                self.logger.error(f"❌ Erro no subprocess: {e}")
-                self.logger.info("💡 Tente executar manualmente: cursor ~/code/Bibliotech")
-            
-            # Limpar script temporário
-            try:
-                os.remove(script_path)
-            except:
-                pass
-            
+            self.logger.info("🎵 Abrindo Aura no Spotify...")
+            url = "https://open.spotify.com/intl-pt/track/6DvGOGRRjhURCE7weXWV3x?si=36e9740f11584a01"
+            subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.logger.info("🎉 Aura aberta no Spotify!")
         except Exception as e:
-            self.logger.error(f"❌ Erro inesperado: {e}")
-            self.logger.info("💡 Não foi possível abrir a biblioteca")
-    
+            self.logger.error(f"❌ Erro ao abrir Aura: {e}")
+
     def _open_music(self):
         """Abre o Spotify para música"""
         try:
@@ -817,6 +750,10 @@ class JarvisFinal:
         """Fecha o Jarvis com som de despedida"""
         self.logger.info("👋 Comando de fechamento recebido...")
         
+        # Fechar gestos se estiver rodando
+        if self.gesture_controller:
+            self.gesture_controller.stop()
+
         # Fechar cmatrix se estiver rodando
         self._stop_cmatrix()
         
@@ -853,16 +790,12 @@ def main():
     
     # Verificar argumentos
     hotword = "jarvis"
-    model_path = None
-    
     if len(sys.argv) > 1:
         hotword = sys.argv[1]
-    if len(sys.argv) > 2:
-        model_path = sys.argv[2]
-    
+
     try:
         # Criar e inicializar o assistente
-        jarvis = JarvisFinal(hotword=hotword, model_path=model_path)
+        jarvis = JarvisFinal(hotword=hotword)
         
         print(f"✅ Jarvis Final inicializado com hotword: '{hotword}'")
         print("🎤 Escutando... (pressione Ctrl+C para sair)")

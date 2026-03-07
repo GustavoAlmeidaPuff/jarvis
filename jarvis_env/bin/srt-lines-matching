@@ -1,4 +1,4 @@
-#!/home/gustavo/code/jarvis/jarvis_env/bin/python3
+#!/home/gustavo/Documentos/code/jarvis/jarvis_env/bin/python3
 
 """Filter subtitles that match or don't match a particular pattern."""
 
