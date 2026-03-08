@@ -237,7 +237,7 @@ class JarvisFinal:
                 access_key=access_key,
                 keyword_paths=[keyword_path],
                 model_path=model_path,
-                sensitivities=[0.85]
+                sensitivities=[0.97]
             )
             self.logger.info(f"✅ Porcupine inicializado com modelo customizado PT (sensitivity=0.85)")
         except Exception as e:

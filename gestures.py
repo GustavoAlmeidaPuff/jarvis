@@ -92,6 +92,12 @@ class GestureController:
             self._landmarks = result.hand_landmarks or []
 
     def _check_gestures(self):
+        try:
+            self._check_gestures_inner()
+        except Exception as e:
+            logger.warning(f"⚠️  Erro em _check_gestures (ignorado): {e}")
+
+    def _check_gestures_inner(self):
         with self._lock:
             hands = list(self._landmarks)
 
@@ -156,36 +162,54 @@ class GestureController:
         else:
             self._vol_history.clear()
 
-    def _loop(self):
-        cap = None
+    def _open_camera(self):
         for idx in [0, 1, 2]:
             c = cv2.VideoCapture(idx)
             ret, _ = c.read()
             if ret:
-                cap = c
                 logger.info(f"📷 Usando câmera {idx}")
-                break
+                return c
             c.release()
+        return None
 
+    def _loop(self):
+        cap = self._open_camera()
         if cap is None:
             logger.error("❌ Webcam não encontrada")
             return
 
         logger.info("✅ Gestos iniciados")
         timestamp = 0
+        consecutive_failures = 0
 
         while self.running:
-            ret, frame = cap.read()
-            if not ret:
-                continue
+            try:
+                ret, frame = cap.read()
+                if not ret:
+                    consecutive_failures += 1
+                    if consecutive_failures >= 30:
+                        logger.warning("⚠️  Câmera falhou, tentando reconectar...")
+                        cap.release()
+                        cap = self._open_camera()
+                        if cap is None:
+                            logger.error("❌ Não conseguiu reconectar a câmera")
+                            break
+                        consecutive_failures = 0
+                    time.sleep(0.03)
+                    continue
 
-            rgb      = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            self.landmarker.detect_async(mp_image, timestamp)
-            timestamp += 33
+                consecutive_failures = 0
+                rgb      = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                self.landmarker.detect_async(mp_image, timestamp)
+                timestamp += 33
 
-            self._check_gestures()
-            time.sleep(0.03)
+                self._check_gestures()
+                time.sleep(0.03)
+
+            except Exception as e:
+                logger.warning(f"⚠️  Erro no loop de gestos (continuando): {e}")
+                time.sleep(0.1)
 
         if self._alt_held:
             pyautogui.keyUp("alt")
