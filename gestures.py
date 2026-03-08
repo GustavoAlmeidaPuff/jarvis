@@ -3,7 +3,9 @@
 Controle por gestos com uma mão usando MediaPipe Tasks + webcam.
 
 Gestos:
-  - Pinça (polegar + indicador)                  → Alt+Tab (segura enquanto pinçado)
+  - Pinça (polegar + indicador)                   → Alt+Tab (segura Alt enquanto pinçado)
+  - Pinça mantida + mover direita                 → seta direita
+  - Pinça mantida + mover esquerda                → seta esquerda
   - Indicador + médio levantados, mover pra cima → volume +10%
   - Indicador + médio levantados, mover pra baixo → volume -10%
 """
@@ -29,6 +31,8 @@ VOL_STEP          = 10    # % por gesto
 VOL_COOLDOWN      = 0.3   # segundos entre ajustes de volume
 VOL_VELOCITY_DOWN = 0.18  # velocidade mínima para volume - (mão pra baixo)
 VOL_VELOCITY_UP   = 0.12  # velocidade mínima para volume + (mão pra cima, mais sensível)
+PINCH_VELOCITY    = 0.20  # velocidade mínima horizontal para seta (pinça)
+PINCH_COOLDOWN    = 0.4   # segundos entre setas
 
 
 def _dist(p1, p2) -> float:
@@ -65,9 +69,11 @@ class GestureController:
         self._thread    = None
         self._lock      = threading.Lock()
         self._landmarks = []
-        self._alt_held    = False
-        self._vol_history: collections.deque = collections.deque(maxlen=20)
-        self._last_vol_t  = 0.0
+        self._alt_held      = False
+        self._vol_history: collections.deque   = collections.deque(maxlen=20)
+        self._last_vol_t    = 0.0
+        self._pinch_history: collections.deque = collections.deque(maxlen=20)
+        self._last_pinch_t  = 0.0
 
         base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
         options = mp_vision.HandLandmarkerOptions(
@@ -92,19 +98,42 @@ class GestureController:
         lm = hands[0] if hands else None
         pinching = lm is not None and _is_pinch(lm)
 
-        if pinching and not self._alt_held:
-            logger.info("🤙 Pinça → Alt segurado + Tab")
-            pyautogui.keyDown("alt")
-            pyautogui.press("tab")
-            self._alt_held = True
+        # ── Pinça: Alt+Tab ao fechar, setas ao mover com pinça ──────────
+        if pinching:
+            if not self._alt_held:
+                logger.info("🤙 Pinça → Alt segurado + Tab")
+                pyautogui.keyDown("alt")
+                pyautogui.press("tab")
+                self._alt_held = True
 
-        elif not pinching and self._alt_held:
-            logger.info("✋ Pinça solta → Alt liberado")
-            pyautogui.keyUp("alt")
-            self._alt_held = False
+            now = time.time()
+            wrist_x = lm[0].x
+            self._pinch_history.append((now, wrist_x))
+
+            window = [(t, x) for t, x in self._pinch_history if now - t <= 0.3]
+            if len(window) >= 4:
+                dx = window[-1][1] - window[0][1]
+                dt = window[-1][0] - window[0][0]
+                if dt > 0:
+                    velocity = dx / dt  # positivo = mão indo pra direita
+                    if abs(velocity) > PINCH_VELOCITY and now - self._last_pinch_t >= PINCH_COOLDOWN:
+                        if velocity > 0:
+                            pyautogui.press("right")
+                            logger.info("👉 Pinça direita → seta direita")
+                        else:
+                            pyautogui.press("left")
+                            logger.info("👈 Pinça esquerda → seta esquerda")
+                        self._last_pinch_t = now
+                        self._pinch_history.clear()
+        else:
+            self._pinch_history.clear()
+            if self._alt_held:
+                logger.info("✋ Pinça solta → Alt liberado")
+                pyautogui.keyUp("alt")
+                self._alt_held = False
 
         # ── Volume: indicador + médio levantados, move pra cima/baixo ───
-        if not self._alt_held and lm is not None and _is_two_fingers_up(lm):
+        if lm is not None and _is_two_fingers_up(lm):
             now   = time.time()
             wrist_y = lm[0].y
             self._vol_history.append((now, wrist_y))

@@ -19,6 +19,7 @@ import whisper
 import difflib
 from pathlib import Path
 from gestures import GestureController
+from jarvis_gui import JarvisGUI
 import pygame
 from gtts import gTTS
 import tempfile
@@ -57,7 +58,8 @@ class JarvisFinal:
         self._init_whisper()
         self._init_command_mapping()
         self._init_gestures()
-        
+        self._init_gui()
+
         # Tocar som de inicialização
         self._play_startup_sound()
         
@@ -243,6 +245,15 @@ class JarvisFinal:
             self.logger.info("Usando modo de teste sem Porcupine")
             self.porcupine = None
     
+    def _init_gui(self):
+        """Abre o painel de controle em thread separada"""
+        try:
+            gui = JarvisGUI(jarvis_instance=self)
+            gui.run_in_thread()
+            self.logger.info("✅ Painel de controle iniciado")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Painel de controle não disponível: {e}")
+
     def _init_gestures(self):
         """Inicializa o controlador de gestos"""
         try:
