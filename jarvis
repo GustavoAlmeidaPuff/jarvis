@@ -7,7 +7,7 @@ echo "🤖 Iniciando Jarvis - Assistente de Voz Local"
 echo "=============================================="
 
 # Diretório do Jarvis
-JARVIS_DIR="/home/gustavo/code/jarvis"
+JARVIS_DIR="/home/gustavo/Documentos/code/jarvis"
 
 # Verificar se o diretório existe
 if [ ! -d "$JARVIS_DIR" ]; then

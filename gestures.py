@@ -3,13 +3,17 @@
 Controle por gestos com uma mão usando MediaPipe Tasks + webcam.
 
 Gestos:
-  - Pinça (polegar + indicador juntos) → Alt+Tab
+  - Pinça (polegar + indicador)                  → Alt+Tab (segura enquanto pinçado)
+  - Indicador + médio levantados, mover pra cima → volume +5%
+  - Indicador + médio levantados, mover pra baixo → volume -5%
 """
 
 import os
 import time
 import logging
 import threading
+import collections
+import subprocess
 import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
@@ -20,13 +24,38 @@ pyautogui.FAILSAFE = False
 
 logger = logging.getLogger("Gestures")
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "hand_landmarker.task")
+MODEL_PATH     = os.path.join(os.path.dirname(__file__), "hand_landmarker.task")
+VOL_STEP          = 10    # % por gesto
+VOL_COOLDOWN      = 0.3   # segundos entre ajustes de volume
+VOL_VELOCITY_DOWN = 0.18  # velocidade mínima para volume - (mão pra baixo)
+VOL_VELOCITY_UP   = 0.12  # velocidade mínima para volume + (mão pra cima, mais sensível)
+
+
 def _dist(p1, p2) -> float:
     return ((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2) ** 0.5
 
 
 def _is_pinch(lm) -> bool:
     return _dist(lm[4], lm[8]) < 0.08
+
+
+def _is_two_fingers_up(lm) -> bool:
+    """Indicador + médio estendidos, anelar + mínimo dobrados."""
+    return (
+        lm[8].y  < lm[6].y  < lm[5].y   and  # indicador
+        lm[12].y < lm[10].y < lm[9].y   and  # médio
+        lm[16].y > lm[14].y              and  # anelar dobrado
+        lm[20].y > lm[18].y                   # mínimo dobrado
+    )
+
+
+def _set_volume(delta: int):
+    sign = "+" if delta > 0 else "-"
+    subprocess.run(
+        ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{sign}{abs(delta)}%"],
+        capture_output=True
+    )
+    logger.info(f"🔊 Volume {sign}{abs(delta)}%")
 
 
 class GestureController:
@@ -36,7 +65,9 @@ class GestureController:
         self._thread    = None
         self._lock      = threading.Lock()
         self._landmarks = []
-        self._alt_held  = False
+        self._alt_held    = False
+        self._vol_history: collections.deque = collections.deque(maxlen=20)
+        self._last_vol_t  = 0.0
 
         base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
         options = mp_vision.HandLandmarkerOptions(
@@ -71,6 +102,30 @@ class GestureController:
             logger.info("✋ Pinça solta → Alt liberado")
             pyautogui.keyUp("alt")
             self._alt_held = False
+
+        # ── Volume: indicador + médio levantados, move pra cima/baixo ───
+        if not self._alt_held and lm is not None and _is_two_fingers_up(lm):
+            now   = time.time()
+            wrist_y = lm[0].y
+            self._vol_history.append((now, wrist_y))
+
+            window = [(t, y) for t, y in self._vol_history if now - t <= 0.3]
+            if len(window) >= 4:
+                dy = window[-1][1] - window[0][1]
+                dt = window[-1][0] - window[0][0]
+                if dt > 0:
+                    velocity = dy / dt  # positivo = mão descendo (y aumenta)
+                    going_up   = velocity < 0 and abs(velocity) > VOL_VELOCITY_UP
+                    going_down = velocity > 0 and abs(velocity) > VOL_VELOCITY_DOWN
+                    if (going_up or going_down) and now - self._last_vol_t >= VOL_COOLDOWN:
+                        if going_down:
+                            _set_volume(-VOL_STEP)   # mão pra baixo = volume -
+                        else:
+                            _set_volume(+VOL_STEP)   # mão pra cima = volume +
+                        self._last_vol_t = now
+                        self._vol_history.clear()
+        else:
+            self._vol_history.clear()
 
     def _loop(self):
         cap = None
