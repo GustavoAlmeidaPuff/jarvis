@@ -246,13 +246,13 @@ class JarvisFinal:
             self.porcupine = None
     
     def _init_gui(self):
-        """Abre o painel de controle em thread separada"""
+        """Prepara o painel de controle (será iniciado na thread principal pelo main)"""
         try:
-            gui = JarvisGUI(jarvis_instance=self)
-            gui.run_in_thread()
-            self.logger.info("✅ Painel de controle iniciado")
+            self.gui = JarvisGUI(jarvis_instance=self)
+            self.logger.info("✅ Painel de controle preparado")
         except Exception as e:
             self.logger.warning(f"⚠️  Painel de controle não disponível: {e}")
+            self.gui = None
 
     def _init_gestures(self):
         """Inicializa o controlador de gestos"""
@@ -805,18 +805,22 @@ def main():
         hotword = sys.argv[1]
 
     try:
-        # Criar e inicializar o assistente
         jarvis = JarvisFinal(hotword=hotword)
-        
+
         print(f"✅ Jarvis Final inicializado com hotword: '{hotword}'")
         print("🎤 Escutando... (pressione Ctrl+C para sair)")
-        print("💡 Diga 'Jarvis' seguido de um comando")
-        print("💡 Comandos: teste, hora, data, ajuda, navegador, arquivos, status")
         print()
-        
-        # Iniciar escuta
-        jarvis.start_listening()
-        
+
+        # Loop de escuta em thread separada (tkinter precisa da thread principal)
+        listen_thread = threading.Thread(target=jarvis.start_listening, daemon=True)
+        listen_thread.start()
+
+        # GUI na thread principal
+        if jarvis.gui:
+            jarvis.gui.run()
+        else:
+            listen_thread.join()
+
     except KeyboardInterrupt:
         print("\n👋 Jarvis encerrado pelo usuário")
     except Exception as e:
