@@ -4,8 +4,8 @@ Controle por gestos com uma mão usando MediaPipe Tasks + webcam.
 
 Gestos:
   - Pinça (polegar + indicador)                  → Alt+Tab (segura enquanto pinçado)
-  - Indicador + médio levantados, mover pra cima → volume +5%
-  - Indicador + médio levantados, mover pra baixo → volume -5%
+  - Indicador + médio levantados, mover pra cima → volume +10%
+  - Indicador + médio levantados, mover pra baixo → volume -10%
 """
 
 import os
